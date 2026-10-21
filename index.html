@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Seguridad en aplicaciones web</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --page-bg:#FFFFFF; --card-bg:#EEF1FD; --tile-bg:#FFFFFF; --ink:#171A2B; --text-muted:#5B6478;
+  --border:#E1E5FA; --accent-blue:#3457E8; --teal:#0EA5B7; --ia-fill:#0EA5B7;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page-bg:#0B0E1A; --card-bg:#161A2E; --tile-bg:#0F1220; --ink:#ECEFFC; --text-muted:#9AA3C0;
+    --border:#262B46; --accent-blue:#6C8CFF; --teal:#35D6E8; --ia-fill:#35D6E8;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --page-bg:#0B0E1A; --card-bg:#161A2E; --tile-bg:#0F1220; --ink:#ECEFFC; --text-muted:#9AA3C0;
+  --border:#262B46; --accent-blue:#6C8CFF; --teal:#35D6E8; --ia-fill:#35D6E8;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--page-bg); color:var(--ink);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; line-height:1.6;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.ib{stroke:var(--ink); stroke-width:3; stroke-linecap:round; stroke-linejoin:round; fill:none;}
+.ia{stroke:var(--teal); fill:var(--teal);}
+header{ border-bottom:1px solid var(--border); }
+.header-inner{ max-width:1180px; margin:0 auto; padding:40px 24px 28px; }
+.eyebrow{ font-family:'JetBrains Mono',monospace; font-size:.78rem; font-weight:700; color:var(--teal); text-transform:uppercase; letter-spacing:.08em; margin-bottom:10px; }
+h1{ font-family:'JetBrains Mono',monospace; font-weight:800; font-size:2rem; margin:0 0 12px; letter-spacing:-.01em; }
+.intro{ color:var(--text-muted); max-width:62ch; font-size:1.02rem; margin:0; }
+.grid{ max-width:1180px; margin:0 auto; padding:32px 24px 80px; display:grid; grid-template-columns:repeat(3,1fr); gap:22px; }
+@media (max-width:900px){ .grid{ grid-template-columns:repeat(2,1fr); } }
+@media (max-width:620px){ .grid{ grid-template-columns:1fr; } .header-inner{ padding:30px 20px 24px; } h1{ font-size:1.5rem; } }
+.card{
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  background:var(--card-bg); border-radius:16px; padding:28px 22px 26px; text-decoration:none; color:var(--ink);
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.card:hover{ transform:translateY(-3px); box-shadow:0 10px 24px rgba(52,87,232,.14); text-decoration:none; }
+.badge{
+  display:inline-block; background:var(--accent-blue); color:#fff; font-family:'JetBrains Mono',monospace;
+  font-size:.72rem; font-weight:700; letter-spacing:.03em; padding:5px 12px; border-radius:999px; margin-bottom:18px;
+}
+.icon-tile{
+  width:104px; height:104px; background:var(--tile-bg); border-radius:14px; display:flex; align-items:center; justify-content:center;
+  margin-bottom:18px; box-shadow:0 1px 2px rgba(0,0,0,.06);
+}
+.card h2{ font-family:'JetBrains Mono',monospace; font-weight:700; font-size:1.05rem; margin:0 0 8px; line-height:1.3; }
+.card p{ color:var(--text-muted); font-size:.88rem; margin:0 0 20px; line-height:1.5; }
+.explore{ font-family:'JetBrains Mono',monospace; font-weight:700; font-size:.86rem; color:var(--accent-blue); margin-top:auto; border-bottom:2px solid var(--accent-blue); padding-bottom:2px; }
+.arrow{ display:inline-block; transition:transform .15s ease; }
+.card:hover .arrow{ transform:translateX(3px); }
+footer{ max-width:1180px; margin:0 auto; padding:10px 24px 50px; color:var(--text-muted); font-size:.82rem; text-align:center; }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <div class="eyebrow">Formación interna</div>
+    <h1>Seguridad en aplicaciones web</h1>
+    <p class="intro">Notas internas sobre vulnerabilidades web habituales: qué son, cómo se ven en código, cómo se detectan y cómo se corrigen. Cada lección incluye un ejemplo ficticio y una comprobación corta al final.</p>
+  </div>
+</header>
+<div class="grid">
+  <a class="card" href="idor.html">
+    <span class="badge">Lección 01</span>
+    <div class="icon-tile"><svg viewBox="0 0 64 64" width="64" height="64" fill="none"><circle class="ib" cx="22" cy="24" r="10"/><circle class="ia" cx="22" cy="24" r="3" fill="var(--ia-fill)" stroke="none"/><path class="ib" d="M30 32l18 18"/><path class="ib" d="M42 44l6-6"/><path class="ib" d="M46 48l6-6"/></svg></div>
+    <h2>Control de acceso roto (IDOR)</h2>
+    <p>La aplicación comprueba que hay sesión, pero no si esa sesión tiene permiso sobre el recurso pedido.</p>
+    <span class="explore">Explorar lección <span class="arrow">&rarr;</span></span>
+  </a>
+  <a class="card" href="inyeccion-css.html">
+    <span class="badge">Lección 02</span>
+    <div class="icon-tile"><svg viewBox="0 0 64 64" width="64" height="64" fill="none"><path class="ib" d="M16 6h20l12 12v40H16z"/><path class="ib" d="M36 6v12h12"/><text class="ia" x="32" y="46" font-family="'JetBrains Mono',monospace" font-size="13" font-weight="700" text-anchor="middle">CSS</text></svg></div>
+    <h2>Inyección CSS</h2>
+    <p>CSS controlado por el usuario que filtra información, suplanta la interfaz o facilita clickjacking.</p>
+    <span class="explore">Explorar lección <span class="arrow">&rarr;</span></span>
+  </a>
+  <a class="card" href="inyeccion-sql.html">
+    <span class="badge">Lección 03</span>
+    <div class="icon-tile"><svg viewBox="0 0 64 64" width="64" height="64" fill="none"><ellipse class="ib" cx="32" cy="15" rx="17" ry="6"/><path class="ib" d="M15 15v26c0 3 7.5 6 17 6s17-3 17-6V15"/><path class="ib" d="M15 28c0 3 7.5 6 17 6s17-3 17-6"/><text class="ia" x="32" y="54" font-family="'JetBrains Mono',monospace" font-size="11" font-weight="700" text-anchor="middle">SQL</text></svg></div>
+    <h2>Inyección SQL</h2>
+    <p>Entrada de usuario que se mezcla con una consulta a la base de datos.</p>
+    <span class="explore">Explorar lección <span class="arrow">&rarr;</span></span>
+  </a>
+  <a class="card" href="inyeccion-comandos.html">
+    <span class="badge">Lección 04</span>
+    <div class="icon-tile"><svg viewBox="0 0 64 64" width="64" height="64" fill="none"><rect class="ib" x="8" y="12" width="48" height="36" rx="4"/><path class="ib" d="M8 21h48"/><path class="ia" d="M16 30l8 6-8 6" stroke-width="3"/><path class="ia" d="M30 42h12" stroke-width="3"/></svg></div>
+    <h2>Inyección de comandos</h2>
+    <p>Entrada que llega a una llamada de shell del sistema operativo sin separarla del comando.</p>
+    <span class="explore">Explorar lección <span class="arrow">&rarr;</span></span>
+  </a>
+  <a class="card" href="fuerza-bruta.html">
+    <span class="badge">Lección 05</span>
+    <div class="icon-tile"><svg viewBox="0 0 64 64" width="64" height="64" fill="none"><rect class="ib" x="14" y="28" width="36" height="26" rx="4"/><path class="ib" d="M22 28v-8a10 10 0 0 1 20 0v8"/><circle class="ia" cx="32" cy="40" r="4" fill="var(--ia-fill)" stroke="none"/><path class="ia" d="M32 44v6" stroke-width="3"/></svg></div>
+    <h2>Fuerza bruta</h2>
+    <p>Probar combinaciones sin límite hasta acertar una credencial.</p>
+    <span class="explore">Explorar lección <span class="arrow">&rarr;</span></span>
+  </a>
+  <a class="card" href="lfi.html">
+    <span class="badge">Lección 06</span>
+    <div class="icon-tile"><svg viewBox="0 0 64 64" width="64" height="64" fill="none"><path class="ib" d="M8 18h16l6 6h26v26a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2z"/><text class="ia" x="32" y="46" font-family="'JetBrains Mono',monospace" font-size="12" font-weight="700" text-anchor="middle">LFI</text></svg></div>
+    <h2>Inclusión de archivos y Path Traversal</h2>
+    <p>Un parámetro decide qué archivo local se lee, sin restringirlo a opciones controladas.</p>
+    <span class="explore">Explorar lección <span class="arrow">&rarr;</span></span>
+  </a>
+  <a class="card" href="xss.html">
+    <span class="badge">Lección 07</span>
+    <div class="icon-tile"><svg viewBox="0 0 64 64" width="64" height="64" fill="none"><rect class="ib" x="8" y="12" width="48" height="36" rx="4"/><path class="ib" d="M8 21h48"/><text class="ia" x="32" y="40" font-family="'JetBrains Mono',monospace" font-size="14" font-weight="700" text-anchor="middle">&lt;/&gt;</text></svg></div>
+    <h2>Cross-Site Scripting (XSS)</h2>
+    <p>Contenido no confiable que el navegador ejecuta como si fuera parte legítima del sitio.</p>
+    <span class="explore">Explorar lección <span class="arrow">&rarr;</span></span>
+  </a>
+  <a class="card" href="csrf.html">
+    <span class="badge">Lección 08</span>
+    <div class="icon-tile"><svg viewBox="0 0 64 64" width="64" height="64" fill="none"><rect class="ib" x="6" y="22" width="18" height="16" rx="2"/><rect class="ib" x="40" y="22" width="18" height="16" rx="2"/><path class="ia" d="M24 26h15" stroke-width="3"/><path class="ia" d="M36 22l4 4-4 4" stroke-width="3"/><path class="ia" d="M40 36h-15" stroke-width="3"/><path class="ia" d="M28 40l-4-4 4-4" stroke-width="3"/></svg></div>
+    <h2>Cross-Site Request Forgery</h2>
+    <p>Un atacante fuerza una petición en nombre de una sesión ya autenticada.</p>
+    <span class="explore">Explorar lección <span class="arrow">&rarr;</span></span>
+  </a>
+  <a class="card" href="clickjacking.html">
+    <span class="badge">Lección 09</span>
+    <div class="icon-tile"><svg viewBox="0 0 64 64" width="64" height="64" fill="none"><rect class="ib" x="8" y="8" width="32" height="24" rx="3"/><rect class="ib" x="22" y="24" width="34" height="26" rx="3" fill="var(--tile-bg)"/><path class="ia" d="M28 32l16 16M28 32l3 13 4-7 7 4z" fill="var(--ia-fill)" stroke="var(--ia-fill)" stroke-width="1.5"/></svg></div>
+    <h2>Clickjacking</h2>
+    <p>Una interfaz superpuesta engaña a la persona sobre dónde cae realmente su clic.</p>
+    <span class="explore">Explorar lección <span class="arrow">&rarr;</span></span>
+  </a>
+  <a class="card" href="subida-archivos.html">
+    <span class="badge">Lección 10</span>
+    <div class="icon-tile"><svg viewBox="0 0 64 64" width="64" height="64" fill="none"><path class="ib" d="M10 42v8a4 4 0 0 0 4 4h36a4 4 0 0 0 4-4v-8"/><path class="ia" d="M32 38V10" stroke-width="3"/><path class="ia" d="M21 21L32 10l11 11" stroke-width="3"/></svg></div>
+    <h2>Subida de archivos sin restricciones</h2>
+    <p>Un archivo subido sin comprobar su contenido real puede acabar ejecutándose como código.</p>
+    <span class="explore">Explorar lección <span class="arrow">&rarr;</span></span>
+  </a>
+</div>
+<footer>Material de formación interna.</footer>
+</body>
+</html>

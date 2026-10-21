@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Control de acceso roto (IDOR) — Seguridad en aplicaciones web</title>
+<style>
+:root{
+  --bg:#FFFFFF; --bg-subtle:#F6F8FA; --text:#1F2328; --text-muted:#59636E;
+  --border:#D1D9E0; --link:#0969DA; --link-hover:#0550AE;
+  --code-bg:#F6F8FA; --code-border:#D1D9E0;
+  --note-bg:#DDF4FF; --note-border:#54AEFF; --note-text:#0550AE;
+  --warn-bg:#FFF8C5; --warn-border:#D4A72C; --warn-text:#7D4E00;
+  --danger-bg:#FFEBE9; --danger-border:#FF8182; --danger-text:#CF222E;
+  --ok-bg:#DAFBE1; --ok-border:#4AC26B; --ok-text:#1A7F37;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1117; --bg-subtle:#161B22; --text:#E6EDF3; --text-muted:#8B949E;
+    --border:#30363D; --link:#4493F8; --link-hover:#6CB0FF;
+    --code-bg:#161B22; --code-border:#30363D;
+    --note-bg:#0C2D6B; --note-border:#1F6FEB; --note-text:#A5D2FF;
+    --warn-bg:#3B2B00; --warn-border:#9E6A03; --warn-text:#E3B341;
+    --danger-bg:#3C1618; --danger-border:#B62324; --danger-text:#FFA198;
+    --ok-bg:#122117; --ok-border:#2EA043; --ok-text:#6FDD8B;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1117; --bg-subtle:#161B22; --text:#E6EDF3; --text-muted:#8B949E;
+  --border:#30363D; --link:#4493F8; --link-hover:#6CB0FF;
+  --code-bg:#161B22; --code-border:#30363D;
+  --note-bg:#0C2D6B; --note-border:#1F6FEB; --note-text:#A5D2FF;
+  --warn-bg:#3B2B00; --warn-border:#9E6A03; --warn-text:#E3B341;
+  --danger-bg:#3C1618; --danger-border:#B62324; --danger-text:#FFA198;
+  --ok-bg:#122117; --ok-border:#2EA043; --ok-text:#6FDD8B;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:16px; line-height:1.6;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+code,pre,.mono{ font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace; }
+h1,h2,h3{ font-weight:600; line-height:1.25; margin:0 0 .5em; }
+a{ color:var(--link); text-decoration:none; }
+a:hover{ color:var(--link-hover); text-decoration:underline; }
+button{ font-family:inherit; }
+code{ background:var(--code-bg); border:1px solid var(--code-border); border-radius:4px; padding:.1em .35em; font-size:.88em; }
+pre{ background:var(--code-bg); border:1px solid var(--code-border); border-radius:6px; padding:14px 16px; overflow-x:auto; font-size:.85rem; line-height:1.55; margin:10px 0 16px; }
+pre code{ background:none; border:none; padding:0; }
+
+/* top */
+.readbar{ position:sticky; top:0; z-index:30; height:3px; background:var(--border); }
+.readbar-fill{ height:100%; background:var(--link); transition:width .3s ease; }
+header.top{ border-bottom:1px solid var(--border); background:var(--bg); padding:env(safe-area-inset-top,0px) 0 0 0; }
+.top-inner{ max-width:1180px; margin:0 auto; padding:16px 22px; }
+.crumb{ font-size:.85rem; color:var(--text-muted); text-decoration:none; }
+.crumb:hover{ color:var(--link); }
+.top-row{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-top:6px; flex-wrap:wrap; }
+.top-row h1{ font-size:1.3rem; }
+.step-count{ font-size:.82rem; color:var(--text-muted); white-space:nowrap; }
+
+/* layout */
+.layout{ max-width:1180px; margin:0 auto; display:flex; gap:0; align-items:flex-start; }
+nav.steps{ width:230px; flex:none; padding:24px 12px 40px; position:sticky; top:50px; max-height:calc(100vh - 70px); overflow-y:auto; border-right:1px solid var(--border); }
+nav.steps ol{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; }
+.step-btn{ display:flex; align-items:baseline; gap:8px; width:100%; text-align:left; background:none; border:none; border-left:2px solid transparent; padding:7px 12px; cursor:pointer; color:var(--text-muted); font-size:.89rem; }
+.step-btn .num{ font-size:.78rem; color:var(--text-muted); font-variant-numeric:tabular-nums; }
+.step-btn.active{ background:var(--bg-subtle); color:var(--text); font-weight:600; border-left-color:var(--link); }
+.step-btn.done:not(.active){ color:var(--text); }
+.step-btn.done .num::after{ content:"✓"; margin-left:3px; color:var(--ok-text); }
+.step-btn.locked{ opacity:.4; cursor:not-allowed; }
+.step-btn:not(.locked):hover{ background:var(--bg-subtle); }
+
+main{ flex:1; min-width:0; padding:30px 28px 70px; }
+.card{ max-width:700px; }
+.card h2{ font-size:1.4rem; }
+.card p{ max-width:68ch; }
+.card ul{ max-width:68ch; padding-left:1.3em; }
+.card li{ margin-bottom:.4em; }
+
+.callout{ border-left:3px solid var(--note-border); background:var(--note-bg); padding:10px 14px; border-radius:0 4px 4px 0; margin:16px 0; max-width:66ch; }
+.callout.risk{ border-color:var(--danger-border); background:var(--danger-bg); }
+.callout.safe{ border-color:var(--ok-border); background:var(--ok-bg); }
+.callout.warn{ border-color:var(--warn-border); background:var(--warn-bg); }
+.callout p{ margin:0; }
+.callout strong{ display:block; font-size:.78rem; margin-bottom:3px; text-transform:uppercase; letter-spacing:.02em; color:var(--text-muted); }
+.callout.risk strong{ color:var(--danger-text); }
+.callout.safe strong{ color:var(--ok-text); }
+.callout.warn strong{ color:var(--warn-text); }
+
+.vector-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:16px 0; max-width:66ch; }
+.vector-grid div{ background:var(--bg-subtle); border:1px solid var(--border); border-radius:5px; padding:10px 13px; font-size:.88rem; }
+@media (max-width:560px){ .vector-grid{ grid-template-columns:1fr; } }
+
+/* code example labels */
+.code-label{ display:inline-block; font-size:.74rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:2px 8px; border-radius:3px; margin-bottom:6px; }
+.code-label.bad{ background:var(--danger-bg); color:var(--danger-text); }
+.code-label.good{ background:var(--ok-bg); color:var(--ok-text); }
+.scenario{ font-size:.93rem; color:var(--text-muted); margin:0 0 10px; max-width:66ch; }
+
+.checklist{ display:flex; flex-direction:column; gap:7px; max-width:66ch; margin:16px 0; }
+.checklist label{ display:flex; gap:9px; align-items:flex-start; background:var(--bg-subtle); border:1px solid var(--border); padding:9px 12px; border-radius:5px; cursor:pointer; font-size:.92rem; }
+.checklist input{ margin-top:3px; }
+.checklist-counter{ display:flex; align-items:center; gap:10px; font-size:.82rem; color:var(--text-muted); margin:12px 0 8px; max-width:66ch; }
+.checklist-counter::before{ content:""; flex:1; height:5px; border-radius:3px; background:var(--border);
+  background-image:linear-gradient(var(--link),var(--link)); background-repeat:no-repeat; background-size: calc(var(--pct,0)*1%) 100%; }
+
+/* flow line */
+.flow{ border:1px solid var(--border); background:var(--bg-subtle); border-radius:5px; padding:10px 14px; margin:4px 0 20px; max-width:66ch; font-size:.86rem; color:var(--text-muted); display:flex; flex-wrap:wrap; gap:6px 4px; align-items:center; }
+.flow .lbl{ font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); width:100%; margin-bottom:2px; }
+.flow .seg{ color:var(--text); }
+.flow .sep{ color:var(--text-muted); }
+
+/* quiz */
+.q{ border:1px solid var(--border); border-radius:6px; padding:16px 18px; margin-bottom:14px; max-width:66ch; }
+.q .q-num{ font-size:.76rem; color:var(--text-muted); }
+.q p.prompt{ font-weight:600; margin:5px 0 12px; }
+.opt{ display:block; width:100%; text-align:left; border:1px solid var(--border); background:var(--bg); color:var(--text); border-radius:5px; padding:9px 13px; margin-bottom:7px; cursor:pointer; font-size:.92rem; }
+.opt:hover:not(:disabled){ border-color:var(--link); }
+.opt.correct{ border-color:var(--ok-border); background:var(--ok-bg); font-weight:600; }
+.opt.incorrect{ border-color:var(--danger-border); background:var(--danger-bg); }
+.opt:disabled{ cursor:default; }
+.explain{ font-size:.87rem; color:var(--text-muted); margin-top:9px; padding-top:9px; border-top:1px dashed var(--border); }
+.quiz-summary{ display:flex; flex-direction:column; gap:6px; border:1px solid var(--border); border-radius:6px; padding:12px 16px; margin-bottom:18px; max-width:66ch; }
+.quiz-summary .score-line{ display:flex; justify-content:space-between; font-size:.88rem; font-weight:600; }
+.quiz-summary .bar{ height:5px; border-radius:3px; background:var(--border); overflow:hidden; }
+.quiz-summary .bar-fill{ height:100%; background:var(--link); }
+
+/* pagination */
+.step-nav{ display:flex; justify-content:space-between; gap:12px; max-width:700px; margin-top:28px; padding-top:18px; border-top:1px solid var(--border); }
+.btn{ border:1px solid var(--border); background:var(--bg); color:var(--text); padding:8px 16px; border-radius:5px; font-size:.9rem; cursor:pointer; }
+.btn:hover:not(:disabled){ border-color:var(--link); color:var(--link); }
+.btn.primary{ background:var(--link); border-color:var(--link); color:#fff; }
+.btn.primary:hover:not(:disabled){ color:#fff; opacity:.9; }
+.btn:disabled{ opacity:.4; cursor:not-allowed; }
+.btn.ghost{ background:none; }
+
+.steps-mobile{ display:none; }
+@media (max-width:860px){
+  nav.steps{ display:none; }
+  .steps-mobile{ display:flex; gap:6px; overflow-x:auto; padding:10px 16px; border-bottom:1px solid var(--border); background:var(--bg-subtle); }
+  .steps-mobile .chip{ flex:none; font-size:.76rem; padding:5px 10px; border-radius:4px; border:1px solid var(--border); color:var(--text-muted); background:var(--bg); }
+  .steps-mobile .chip.active{ background:var(--link); color:#fff; border-color:var(--link); }
+  main{ padding:20px 16px 60px; }
+}
+
+/* line-identification exercise */
+.linecode{ border:1px solid var(--border); border-radius:6px; overflow:hidden; margin:14px 0 4px; max-width:66ch; }
+.linecode .line{ display:flex; width:100%; text-align:left; background:var(--bg); border:none; border-bottom:1px solid var(--border);
+  padding:5px 12px; cursor:pointer; color:var(--text); font-size:.84rem; }
+.linecode .line:last-child{ border-bottom:none; }
+.linecode .line:hover:not(.locked){ background:var(--bg-subtle); }
+.linecode .line.locked{ cursor:default; }
+.linecode .line .ln{ color:var(--text-muted); width:24px; flex:none; user-select:none; text-align:right; margin-right:14px; }
+.linecode .line .code{ display:block; min-width:0; flex:1; white-space:pre; overflow-x:auto; }
+.linecode .line.correct{ background:var(--ok-bg); }
+.linecode .line.incorrect{ background:var(--danger-bg); }
+.li-hint{ font-size:.86rem; color:var(--text-muted); margin:0 0 6px; max-width:66ch; }
+
+/* optional hint for line-id exercise */
+.tip-btn{ margin:2px 0 10px; font-size:.82rem; padding:6px 12px; }
+.li-tip{ font-size:.86rem; color:var(--text-muted); font-style:italic; margin:0 0 12px; max-width:66ch;
+  border-left:3px solid var(--border); padding-left:10px; }
+
+/* syntax highlighting tokens */
+:root{ --tok-kw:#CF222E; --tok-str:#0A3069; --tok-com:#6E7781; --tok-fn:#8250DF; --tok-num:#0550AE; }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --tok-kw:#FF7B72; --tok-str:#A5D6FF; --tok-com:#8B949E; --tok-fn:#D2A8FF; --tok-num:#79C0FF; }
+}
+:root[data-theme="dark"]{ --tok-kw:#FF7B72; --tok-str:#A5D6FF; --tok-com:#8B949E; --tok-fn:#D2A8FF; --tok-num:#79C0FF; }
+.tok-kw{ color:var(--tok-kw); }
+.tok-str{ color:var(--tok-str); }
+.tok-com{ color:var(--tok-com); font-style:italic; }
+.tok-fn{ color:var(--tok-fn); }
+.tok-num{ color:var(--tok-num); }
+
+/* small typography + motion polish */
+.top-row h1{ font-size:1.42rem; letter-spacing:-.01em; }
+.card h2{ letter-spacing:-.01em; }
+.step-count{ letter-spacing:.01em; }
+@keyframes fadeIn{ from{ opacity:0; transform:translateY(4px); } to{ opacity:1; transform:translateY(0); } }
+.card{ animation:fadeIn .18s ease; }
+pre{ line-height:1.6; }
+.linecode .line .code{ line-height:1.5; }
+
+/* depth pass: two-tier background + shadows */
+:root{ --page-bg:#F6F8FA; --shadow-sm:0 1px 2px rgba(0,0,0,.05), 0 1px 1px rgba(0,0,0,.03);
+  --shadow-md:0 1px 3px rgba(0,0,0,.08), 0 3px 10px rgba(0,0,0,.05); }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --page-bg:#010409; --shadow-sm:0 1px 2px rgba(0,0,0,.45);
+    --shadow-md:0 2px 10px rgba(0,0,0,.55); }
+}
+:root[data-theme="dark"]{ --page-bg:#010409; --shadow-sm:0 1px 2px rgba(0,0,0,.45); --shadow-md:0 2px 10px rgba(0,0,0,.55); }
+
+body{ background:var(--page-bg); }
+header.top{ background:var(--bg); box-shadow:var(--shadow-sm); position:sticky; top:0; z-index:30; }
+.readbar{ position:relative; }
+nav.steps{ background:var(--page-bg); }
+
+main{ background:var(--page-bg); }
+main .card{
+  background:var(--bg); border:1px solid var(--border); border-radius:10px;
+  padding:30px 34px; box-shadow:var(--shadow-md);
+}
+.card h2{ padding-bottom:12px; border-bottom:2px solid var(--border); margin-bottom:18px; }
+
+pre{ box-shadow:var(--shadow-sm); }
+.linecode{ box-shadow:var(--shadow-sm); }
+.q{ box-shadow:var(--shadow-sm); background:var(--bg); }
+.callout{ box-shadow:var(--shadow-sm); }
+.vector-grid div{ box-shadow:var(--shadow-sm); background:var(--bg); }
+.checklist label{ box-shadow:var(--shadow-sm); background:var(--bg); }
+.quiz-summary{ box-shadow:var(--shadow-sm); background:var(--bg); }
+
+.btn{ box-shadow:var(--shadow-sm); transition:transform .12s ease, box-shadow .12s ease; }
+.btn:hover:not(:disabled){ transform:translateY(-1px); box-shadow:var(--shadow-md); }
+.btn.primary{ box-shadow:0 1px 3px rgba(0,0,0,.2); }
+.opt{ box-shadow:var(--shadow-sm); }
+.opt:hover:not(:disabled){ transform:translateY(-1px); }
+
+.step-btn.active{ box-shadow:inset 2px 0 0 var(--link); }
+
+/* brand color pass: header, sidebar, progress, primary button — code blocks untouched */
+:root{ --accent-blue:#3457E8; --teal:#0EA5B7; --card-tint:#EEF1FD; }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --accent-blue:#6C8CFF; --teal:#35D6E8; --card-tint:#161A2E; }
+}
+:root[data-theme="dark"]{ --accent-blue:#6C8CFF; --teal:#35D6E8; --card-tint:#161A2E; }
+
+.lesson-icon{ width:34px; height:34px; flex:none; }
+.lesson-icon .ib{ stroke:var(--accent-blue); stroke-width:3; stroke-linecap:round; stroke-linejoin:round; fill:none; }
+.lesson-icon .ia{ stroke:var(--teal); fill:var(--teal); }
+.top-row{ align-items:center; gap:12px; }
+.top-row-title{ display:flex; align-items:center; gap:10px; }
+
+header.top{ background:linear-gradient(180deg, var(--card-tint) 0%, var(--bg) 100%); }
+.readbar{ background:var(--border); }
+.readbar-fill{ background:linear-gradient(90deg, var(--accent-blue), var(--teal)); }
+
+nav.steps{ background:var(--card-tint); }
+.step-btn.active{ background:var(--bg); box-shadow:inset 2px 0 0 var(--accent-blue); color:var(--accent-blue); }
+.step-btn.done .num::after{ color:var(--teal); }
+
+.btn.primary{ background:linear-gradient(135deg, var(--accent-blue), var(--teal)); border-color:transparent; }
+a{ color:var(--accent-blue); }
+a:hover{ color:var(--teal); }
+.q .q-num, .li-hint, .scenario{ color:var(--accent-blue); font-weight:600; }
+.quiz-summary .bar-fill{ background:linear-gradient(90deg, var(--accent-blue), var(--teal)); }
+.checklist-counter::before{ background-image:linear-gradient(90deg, var(--accent-blue), var(--teal)); }
+
+.steps-mobile{ background:var(--card-tint); }
+.steps-mobile .chip.active{ background:var(--accent-blue); border-color:var(--accent-blue); }
+
+</style>
+</head>
+<body>
+
+<div class="readbar"><div class="readbar-fill" id="progress-fill" style="width:12%"></div></div>
+<header class="top">
+  <div class="top-inner">
+    <a class="crumb" href="index.html">← Índice</a>
+    <div class="top-row">
+      <div class="top-row-title">
+        <svg class="lesson-icon" viewBox="0 0 64 64" fill="none"><circle class="ib" cx="22" cy="24" r="10"/><circle class="ia" cx="22" cy="24" r="3" fill="var(--ia-fill)" stroke="none"/><path class="ib" d="M30 32l18 18"/><path class="ib" d="M42 44l6-6"/><path class="ib" d="M46 48l6-6"/></svg>
+        <h1 id="step-title">Control de acceso roto (IDOR)</h1>
+      </div>
+      <span class="step-count" id="step-count"></span>
+    </div>
+  </div>
+</header>
+
+<div class="steps-mobile" id="steps-mobile"></div>
+
+<div class="layout">
+  <nav class="steps"><ol id="steps-list"></ol></nav>
+  <main>
+    <div class="card" id="content"></div>
+    <div class="step-nav">
+      <button class="btn ghost" id="btn-prev">← Anterior</button>
+      <button class="btn primary" id="btn-next">Siguiente →</button>
+    </div>
+  </main>
+</div>
+
+<script>
+const steps = [
+{
+  id:'inicio', title:'Bienvenida', type:'content',
+  html:`
+    <h2>Control de acceso roto / IDOR: cómo detectarlo y detenerlo</h2>
+    <p>Repaso en equipo de uno de los fallos más comunes en aplicaciones reales: acceder a datos de otra persona cambiando un identificador. Versión <strong>conceptual y defensiva</strong>: sin herramientas de ataque, solo lo necesario para reconocer el problema y mitigarlo.</p>
+    <div class="callout"><strong>Qué vas a repasar</strong><p>Qué es, dónde suele colarse, qué impacto real puede tener, un ejemplo ficticio, un ejercicio de localizar el fallo, una comprobación rápida y un checklist de prevención.</p></div>
+    <p>Pulsa «Continuar» cuando quieras empezar.</p>`
+},
+{
+  id:'que-es', title:'¿Qué es?', type:'content',
+  chain:[{icon:"👤",label:"Usuario autenticado pide un recurso por ID"},{icon:"🔑",label:"El servidor solo comprueba que hay sesión"},{icon:"🚪",label:"No verifica si el recurso es suyo"},{icon:"🛡️",label:"Se frena comprobando propiedad en cada petición"}],
+  html:`
+    <h2>¿Qué es el control de acceso roto (IDOR)?</h2>
+    <p>Ocurre cuando una aplicación comprueba que la persona está autenticada, pero no comprueba si <em>esa</em> persona concreta tiene permiso sobre el recurso que pide. Si los identificadores de los recursos —IDs de pedidos, facturas, documentos— son visibles o predecibles, cualquier usuario autenticado puede cambiarlos y acceder a datos ajenos. IDOR (Insecure Direct Object Reference) es el nombre clásico de este caso concreto dentro de la categoría más amplia de control de acceso roto.</p>
+    <div class="callout warn"><strong>La idea clave</strong><p>«Estar autenticado» no es lo mismo que «estar autorizado para este recurso en concreto». Comprobar que hay una sesión iniciada no es lo mismo que comprobar que esa sesión es la dueña del recurso solicitado.</p></div>
+    <p>No vamos a entrar en herramientas de enumeración: lo importante es reconocer cuándo un endpoint abre esta puerta.</p>`
+},
+{
+  id:'vectores', title:'Dónde aparece', type:'content',
+  html:`
+    <h2>¿Dónde suele colarse?</h2>
+    <div class="vector-grid">
+      <div><strong>URLs o APIs con ID visible</strong><br>Rutas como /pedidos/4821 o /facturas/102, donde cambiar el número cambia el recurso.</div>
+      <div><strong>Descarga de documentos</strong><br>Informes, adjuntos o facturas servidos por un identificador recibido del cliente.</div>
+      <div><strong>Editar o eliminar por ID</strong><br>Endpoints que confían en el ID recibido sin comprobar quién lo envía.</div>
+      <div><strong>APIs internas o móviles</strong><br>Se asume, erróneamente, que nadie va a inspeccionar esas peticiones.</div>
+      <div><strong>Paneles de administración</strong><br>Rutas predecibles que comparten patrón con el resto de la aplicación.</div>
+      <div><strong>Exportaciones e informes</strong><br>Generación de PDFs o CSVs por ID, sin revalidar el permiso en ese paso.</div>
+    </div>`
+},
+{
+  id:'impacto', title:'Impacto real', type:'content',
+  html:`
+    <h2>¿Qué impacto puede tener?</h2>
+    <div class="callout risk"><strong>Acceso a datos de otros usuarios</strong><p>Pedidos, facturas, mensajes o historiales que no deberían ser visibles fuera de su propietario.</p></div>
+    <div class="callout risk"><strong>Modificación o borrado ajeno</strong><p>Si el fallo también afecta a escritura, no solo a lectura, el impacto se multiplica.</p></div>
+    <div class="callout risk"><strong>Enumeración masiva</strong><p>Con IDs secuenciales, recorrer todos los números permite volcar los datos de toda la base de usuarios.</p></div>
+    <p>No requiere ninguna técnica sofisticada: basta con cambiar un número en la URL. Por eso suele ser, en la práctica, el fallo más explotado de todos, incluso por delante de varios de los que ya hemos visto.</p>`
+},
+{
+  id:'ejemplo', title:'Ejemplo', type:'content',
+  html:`
+    <h2>Un ejemplo (ficticio)</h2>
+    <p class="scenario">Escenario inventado: "TicketApp" permite descargar la factura de un pedido a partir de su ID.</p>
+    <span class="code-label bad">Vulnerable (ejemplo)</span>
+    <pre><code>@app.route("/facturas/&lt;id&gt;")
+def ver_factura(id):
+    factura = db.get_factura(id)
+    return render(factura)</code></pre>
+    <p>Cualquier usuario con sesión iniciada puede cambiar el id en la URL y ver facturas que no son suyas: la aplicación nunca comprueba de quién es cada factura.</p>
+    <span class="code-label good">Corregido (ejemplo)</span>
+    <pre><code>@app.route("/facturas/&lt;id&gt;")
+def ver_factura(id, usuario):
+    factura = db.get_factura(id)
+    if factura.usuario_id != usuario.id:
+        return error(403)
+    return render(factura)</code></pre>`
+},
+{
+  id:'lineid', title:'Localiza el fallo', type:'lineid',
+  intro:'<h2>Localiza el fallo</h2><p class="scenario">Fichero ficticio: <code>facturas.py</code>, descarga de facturas de TicketApp.</p>',
+  instruction:'Pulsa la única comprobación que hace el código antes de entregar la factura.',
+  tip:'Pista: es la condición al principio de la función.',
+  lines:[
+    "# facturas.py — descarga de facturas",
+    "def ver_factura(id, usuario):",
+    "    if not usuario.autenticado:",
+    "        return error(401)",
+    "    factura = db.get_factura(id)",
+    "    return render(factura)"
+  ],
+  vulnerableLine:2,
+  explain:"Esa es la única comprobación: que el usuario esté autenticado. En ningún momento se verifica que la factura solicitada pertenezca a ese usuario concreto."
+},
+{
+  id:'quiz', title:'Comprobación', type:'quiz',
+  intro:`<h2>Comprobación rápida</h2><p>Cuatro preguntas para validar el concepto antes de pasar a la prevención.</p>`,
+  questions:[
+    { q:'¿Qué distingue IDOR de simplemente "no estar autenticado"?',
+      options:['El usuario SÍ está autenticado correctamente, pero la aplicación no comprueba si tiene permiso sobre ese recurso concreto','IDOR solo ocurre en aplicaciones sin HTTPS','IDOR requiere robar la contraseña de la víctima','No hay diferencia real entre ambos casos'],
+      correct:0, explain:'El fallo no está en la autenticación, que funciona correctamente, sino en que falta una comprobación de autorización sobre el recurso concreto.' },
+    { q:'¿Por qué es tan común este fallo en la práctica?',
+      options:['Porque requiere herramientas muy avanzadas','Porque no requiere ninguna técnica compleja: basta con cambiar un identificador visible en la URL o en la petición','Porque solo afecta a aplicaciones muy antiguas','Porque solo lo pueden explotar administradores de sistemas'],
+      correct:1, explain:'Su sencillez es justo lo que lo hace tan frecuente: no hace falta nada más que fijarse en un número y cambiarlo.' },
+    { q:'¿Cuál es la defensa principal contra IDOR?',
+      options:['Usar contraseñas más largas','Cifrar toda la base de datos','Comprobar en el servidor, en cada petición, que el usuario autenticado es realmente el propietario (o tiene permiso) sobre el recurso solicitado','Ocultar los IDs usando JavaScript en el navegador'],
+      correct:2, explain:'La comprobación de propiedad tiene que hacerse siempre en el servidor; ocultar algo en el cliente no es una barrera real.' },
+    { q:'Un endpoint /api/pedidos/{id} devuelve el pedido completo si existe ese id, sin más comprobación. ¿Qué harías?',
+      options:['Dejarlo así si el ID es difícil de adivinar','Añadir una comprobación de que el pedido pertenece al usuario autenticado antes de devolver los datos, y considerar IDs no predecibles como capa adicional','Eliminar el endpoint por completo','Pedir la contraseña de nuevo en cada petición'],
+      correct:1, explain:'La comprobación de propiedad es la defensa real; un ID no predecible (UUID) ayuda, pero nunca debe ser la única barrera.' }
+  ]
+},
+{
+  id:'defensa', title:'Cómo prevenirlo', type:'content',
+  html:`
+    <h2>Checklist de prevención</h2>
+    <div class="checklist">
+      <label><input type="checkbox"><span>Comprobar en cada petición que el usuario autenticado es el propietario (o tiene permiso) sobre el recurso solicitado, no solo que esté logueado.</span></label>
+      <label><input type="checkbox"><span>No confiar en que un ID "no se adivina": tratar cualquier identificador recibido del cliente como potencialmente manipulable.</span></label>
+      <label><input type="checkbox"><span>Usar identificadores no secuenciales (UUID) como capa adicional, nunca como única defensa.</span></label>
+      <label><input type="checkbox"><span>Centralizar la lógica de autorización en un solo punto en vez de repetirla (y olvidarla) en cada endpoint.</span></label>
+      <label><input type="checkbox"><span>Aplicar las mismas comprobaciones a operaciones de lectura y de escritura/borrado.</span></label>
+      <label><input type="checkbox"><span>Probar explícitamente el acceso cruzado entre cuentas en vuestras revisiones de seguridad y pentests.</span></label>
+    </div>
+    <p>Marca lo que ya cumplís hoy; lo que quede sin marcar es un buen punto de partida para la próxima revisión.</p>`
+},
+{
+  id:'resumen', title:'Resumen', type:'content',
+  html:`
+    <h2>Resumen</h2>
+    <ul>
+      <li>Ocurre cuando se comprueba autenticación pero no autorización sobre el recurso concreto.</li>
+      <li>Aparece sobre todo en endpoints que reciben un ID y lo usan sin verificar propiedad.</li>
+      <li>Es, en la práctica, uno de los fallos más explotados: no requiere técnica avanzada.</li>
+      <li>Se previene comprobando propiedad en el servidor en cada petición, nunca confiando solo en IDs difíciles de adivinar.</li>
+    </ul>
+    <div class="callout safe"><strong>Resultado de la comprobación</strong><p id="final-score">Completa la comprobación para ver tu resultado aquí.</p></div>
+    <div class="step-nav" style="margin-top:0;"><button class="btn ghost" id="btn-restart" type="button">Reiniciar lección</button></div>`,
+  onRender: function(){
+    const scoreEl = document.getElementById('final-score');
+    if(window.__quizDone()){ const {correct,total} = window.__quizScore(); scoreEl.textContent = `Has acertado ${correct} de ${total} preguntas en la comprobación.`; }
+    document.getElementById('btn-restart').onclick = window.__resetLesson;
+  }
+}
+];
+
+
+let current = 0;
+const visited = new Array(steps.length).fill(false);
+const quizState = {};
+let lineIdState = {answered:false, chosen:null, correct:false};
+
+function quizDone(){
+  const qStep = steps.find(s=>s.type==='quiz');
+  if(!qStep) return true;
+  return qStep.questions.every((_,i)=> quizState[i] && quizState[i].answered);
+}
+function quizScore(){
+  const qStep = steps.find(s=>s.type==='quiz');
+  let correct = 0;
+  qStep.questions.forEach((_,i)=>{ if(quizState[i] && quizState[i].correct) correct++; });
+  return {correct, total: qStep.questions.length};
+}
+function stepSatisfied(idx){
+  const s = steps[idx];
+  if(s.type==='quiz') return quizDone();
+  if(s.type==='lineid') return lineIdState.answered;
+  return visited[idx];
+}
+function isUnlocked(i){
+  if(i===0) return true;
+  if(i===1) return visited[0];
+  return stepSatisfied(i-1);
+}
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+const KEYWORDS = /\b(def|if|elif|else|not|and|or|return|for|in|class|import|from|while|try|except|new|function|const|let|var)\b/g;
+function highlightPlain(s){
+  s = s.replace(KEYWORDS, '<span class="tok-kw">$1</span>');
+  s = s.replace(/\b([A-Za-z_][\w]*)(?=\()/g, '<span class="tok-fn">$1</span>');
+  s = s.replace(/\b(\d+)\b/g, '<span class="tok-num">$1</span>');
+  return s;
+}
+function highlightCode(raw){
+  const code = escapeHtml(raw);
+  const pattern = /(#.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/gm;
+  let out = '', last = 0, m;
+  while((m = pattern.exec(code))){
+    out += highlightPlain(code.slice(last, m.index));
+    out += m[1] ? `<span class="tok-com">${m[1]}</span>` : `<span class="tok-str">${m[2]}</span>`;
+    last = pattern.lastIndex;
+  }
+  out += highlightPlain(code.slice(last));
+  return out;
+}
+function highlightAllCode(){
+  document.querySelectorAll('pre code').forEach(el=>{ el.innerHTML = highlightCode(el.textContent); });
+  document.querySelectorAll('.linecode .line .code').forEach(el=>{ el.innerHTML = highlightCode(el.textContent); });
+}
+function renderLineId(step){
+  let html = step.intro || '';
+  html += `<p class="li-hint">${step.instruction || 'Pulsa la línea que contiene el problema.'}</p>`;
+  if(step.tip){
+    html += `<button class="btn ghost tip-btn" id="li-tip-btn" type="button">Mostrar pista</button>`;
+    html += `<p class="li-tip" id="li-tip" style="display:none;">${step.tip}</p>`;
+  }
+  html += `<div class="linecode">`;
+  step.lines.forEach((line,i)=>{
+    html += `<button class="line" data-li="${i}"><span class="ln">${i+1}</span><span class="code">${escapeHtml(line)}</span></button>`;
+  });
+  html += `</div><div class="explain" id="li-explain" style="display:none;"></div>`;
+  return html;
+}
+function lockLineId(step, chosen){
+  document.querySelectorAll('.linecode .line').forEach((btn,i)=>{
+    btn.classList.add('locked');
+    btn.disabled = true;
+    if(i===step.vulnerableLine) btn.classList.add('correct');
+    else if(i===chosen) btn.classList.add('incorrect');
+  });
+  const ex = document.getElementById('li-explain');
+  ex.style.display='block';
+  ex.textContent = (chosen===step.vulnerableLine ? 'Correcto. ' : 'Esa línea no es el problema. ') + step.explain;
+}
+function attachTipHandler(){
+  const btn = document.getElementById('li-tip-btn');
+  if(!btn) return;
+  btn.onclick = ()=>{
+    document.getElementById('li-tip').style.display='block';
+    btn.disabled = true;
+    btn.textContent = 'Pista mostrada';
+  };
+}
+function attachLineIdHandlers(step){
+  attachTipHandler();
+  if(lineIdState.answered){ lockLineId(step, lineIdState.chosen); return; }
+  document.querySelectorAll('.linecode .line').forEach(btn=>{
+    btn.onclick = ()=>{
+      const li = parseInt(btn.dataset.li,10);
+      lineIdState = {answered:true, chosen:li, correct: li===step.vulnerableLine};
+      lockLineId(step, li);
+      renderNav();
+      updateNextButton();
+    };
+  });
+}
+function renderNav(){
+  const list = document.getElementById('steps-list');
+  const mobile = document.getElementById('steps-mobile');
+  list.innerHTML=''; mobile.innerHTML='';
+  steps.forEach((s,i)=>{
+    const unlocked = isUnlocked(i);
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.className = 'step-btn' + (i===current?' active':'') + (visited[i] && i!==current?' done':'') + (!unlocked?' locked':'');
+    btn.disabled = !unlocked;
+    btn.innerHTML = `<span class="num">${i+1}.</span><span>${s.title}</span>`;
+    btn.onclick = ()=>{ if(unlocked){ current=i; render(); } };
+    li.appendChild(btn); list.appendChild(li);
+
+    const chip = document.createElement('button');
+    chip.className = 'chip' + (i===current?' active':'');
+    chip.textContent = (i+1);
+    chip.disabled = !unlocked;
+    chip.onclick = ()=>{ if(unlocked){ current=i; render(); } };
+    mobile.appendChild(chip);
+  });
+}
+function renderChain(chain){
+  let html = '<div class="flow"><span class="lbl">Cómo ocurre, en una línea</span>';
+  chain.forEach((s,i)=>{
+    html += `<span class="seg">${s.label}</span>`;
+    if(i<chain.length-1) html += `<span class="sep">→</span>`;
+  });
+  html += '</div>';
+  return html;
+}
+function renderQuiz(step){
+  let html = step.intro + `<div class="quiz-summary" id="qsum" style="display:none;">
+    <div class="score-line"><span id="qscoretext"></span><span id="qscore"></span></div>
+    <div class="bar"><div class="bar-fill" id="qbar" style="width:0%"></div></div>
+  </div>`;
+  step.questions.forEach((q,i)=>{
+    html += `<div class="q" data-qi="${i}">
+      <span class="q-num">Pregunta ${i+1} de ${step.questions.length}</span>
+      <p class="prompt">${q.q}</p>
+      <div class="opts">`;
+    q.options.forEach((opt,oi)=>{ html += `<button class="opt" data-oi="${oi}">${opt}</button>`; });
+    html += `</div><div class="explain" style="display:none;"></div></div>`;
+  });
+  return html;
+}
+function attachQuizHandlers(step){
+  document.querySelectorAll('.q').forEach(qEl=>{
+    const qi = parseInt(qEl.dataset.qi,10);
+    const q = step.questions[qi];
+    if(quizState[qi] && quizState[qi].answered) markAnswered(qEl, q, quizState[qi].chosen);
+    qEl.querySelectorAll('.opt').forEach(optBtn=>{
+      optBtn.onclick = ()=>{
+        const oi = parseInt(optBtn.dataset.oi,10);
+        quizState[qi] = {answered:true, correct: oi===q.correct, chosen: oi};
+        markAnswered(qEl, q, oi);
+        updateQuizSummary(step);
+        renderNav();
+        updateNextButton();
+      };
+    });
+  });
+  updateQuizSummary(step);
+}
+function markAnswered(qEl, q, chosenIndex){
+  qEl.querySelectorAll('.opt').forEach((b,oi)=>{
+    b.disabled = true;
+    if(oi===q.correct) b.classList.add('correct');
+    else if(oi===chosenIndex) b.classList.add('incorrect');
+  });
+  const explain = qEl.querySelector('.explain');
+  explain.style.display='block';
+  explain.textContent = q.explain;
+}
+function updateQuizSummary(step){
+  if(!quizDone()) return;
+  const {correct,total} = quizScore();
+  const pct = Math.round((correct/total)*100);
+  document.getElementById('qsum').style.display='flex';
+  document.getElementById('qbar').style.width = pct+'%';
+  document.getElementById('qscore').textContent = correct+' / '+total;
+  document.getElementById('qscoretext').textContent = correct===total
+    ? 'Todo correcto'
+    : 'Revisa lo que haya fallado';
+}
+function enhanceChecklist(){
+  const list = document.querySelector('.checklist');
+  if(!list) return;
+  const inputs = list.querySelectorAll('input[type=checkbox]');
+  if(!inputs.length) return;
+  const counter = document.createElement('div');
+  counter.className = 'checklist-counter';
+  list.parentNode.insertBefore(counter, list);
+  function update(){
+    const checked = [...inputs].filter(i=>i.checked).length;
+    counter.textContent = `${checked} de ${inputs.length} medidas marcadas`;
+    counter.style.setProperty('--pct', Math.round((checked/inputs.length)*100));
+  }
+  inputs.forEach(i=> i.addEventListener('change', update));
+  update();
+}
+function render(){
+  visited[current] = true;
+  const step = steps[current];
+  document.getElementById('step-title').textContent = step.title;
+  document.getElementById('step-count').textContent = `Paso ${current+1} de ${steps.length}`;
+  document.getElementById('progress-fill').style.width = Math.round(((current+1)/steps.length)*100)+'%';
+  const content = document.getElementById('content');
+  if(step.type==='quiz'){
+    content.innerHTML = renderQuiz(step);
+    attachQuizHandlers(step);
+  } else if(step.type==='lineid'){
+    content.innerHTML = renderLineId(step);
+    attachLineIdHandlers(step);
+  } else {
+    content.innerHTML = (step.chain ? renderChain(step.chain) : '') + step.html;
+    enhanceChecklist();
+    if(step.onRender) step.onRender();
+  }
+  highlightAllCode();
+  renderNav();
+  updateNextButton();
+  document.getElementById('btn-prev').disabled = current===0;
+  window.scrollTo({top:0});
+}
+function updateNextButton(){
+  const btn = document.getElementById('btn-next');
+  const step = steps[current];
+  const isLast = current===steps.length-1;
+  if(isLast){ btn.textContent='Lección completada'; btn.disabled=true; return; }
+  if(step.type==='quiz' && !quizDone()){
+    btn.textContent='Responde todas las preguntas'; btn.disabled=true;
+  } else if(step.type==='lineid' && !lineIdState.answered){
+    btn.textContent='Señala la línea'; btn.disabled=true;
+  } else {
+    btn.textContent='Siguiente →'; btn.disabled=false;
+  }
+}
+document.getElementById('btn-prev').onclick = ()=>{ if(current>0){ current--; render(); } };
+document.getElementById('btn-next').onclick = ()=>{ if(current<steps.length-1){ current++; render(); } };
+window.__resetLesson = function(){
+  for(let i=0;i<visited.length;i++) visited[i]=false;
+  Object.keys(quizState).forEach(k=>delete quizState[k]);
+  lineIdState = {answered:false, chosen:null, correct:false};
+  current = 0; render();
+};
+window.__quizDone = quizDone;
+window.__quizScore = quizScore;
+render();
+
+</script>
+</body>
+</html>
